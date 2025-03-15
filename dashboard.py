@@ -1,148 +1,69 @@
-import uuid
 from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Replace with a secure key
 
-# Global store for conversations (in memory)
+# Global in-memory store for conversations.
+# We use a fixed conversation ID for our persistent chat.
 conversations = {}
 
-# Define conversation steps for each flow.
-setup_steps = [
-    {"key": "minting", "question": "Enter Minting Amount (SOL):"},
-    {"key": "distribution", "question": "Enter Distribution Amount (SOL):"},
-    {"key": "contract_address", "question": "Enter Contract Address:"},
-    {"key": "sol_pool_wallet", "question": "Enter SOL_POOL_WALLET:"},
-    {"key": "transaction_signature", "question": "Enter TRANSACTION_SIGNATURE:"},
-]
+def get_main_conversation():
+    conv_id = "main_chat"  # fixed persistent conversation ID
+    if conv_id not in conversations:
+        conversations[conv_id] = {"messages": []}  # Each message is a dict: {"sender": "user"/"bot", "text": "..."}
+    return conv_id
 
-reset_confirm_steps = [
-    {"key": "confirm", "question": "Do you want to reset the script with new parameters? (yes/no)"}
-]
-
-reset_steps = [
-    {"key": "minting", "question": "Enter NEW Minting Amount (SOL):"},
-    {"key": "distribution", "question": "Enter NEW Distribution Amount (SOL):"},
-    {"key": "contract_address", "question": "Enter NEW Contract Address:"},
-    {"key": "sol_pool_wallet", "question": "Enter NEW SOL_POOL_WALLET:"},
-    {"key": "transaction_signature", "question": "Enter NEW TRANSACTION_SIGNATURE:"},
-]
-
-# General endpoint to create a new conversation for setup or reset (if using a single flow)
-@app.route('/new/<flow>')
-def new_conversation(flow):
-    if flow not in ['setup', 'reset']:
-        return jsonify({"error": "Invalid flow"}), 400
-    conv_id = str(uuid.uuid4())
-    steps = setup_steps if flow == 'setup' else reset_steps
-    conversations[conv_id] = {
-        "flow": flow,
-        "steps": steps,
-        "index": 0,
-        "responses": {},
-        "finished": False
-    }
+@app.route('/new/main')
+def new_main_conversation():
+    conv_id = get_main_conversation()  # Always returns "main_chat"
     return jsonify({"conversation_id": conv_id})
 
-# New endpoint for reset confirmation conversation.
-@app.route('/new_reset_confirm')
-def new_reset_confirm():
-    conv_id = str(uuid.uuid4())
-    conversations[conv_id] = {
-        "flow": "reset_confirm",
-        "steps": reset_confirm_steps,
-        "index": 0,
-        "responses": {},
-        "finished": False
-    }
-    return jsonify({"conversation_id": conv_id})
-
-# New endpoint for reset parameters conversation.
-@app.route('/new_reset_parameters')
-def new_reset_parameters():
-    conv_id = str(uuid.uuid4())
-    conversations[conv_id] = {
-        "flow": "reset_parameters",
-        "steps": reset_steps,
-        "index": 0,
-        "responses": {},
-        "finished": False
-    }
-    return jsonify({"conversation_id": conv_id})
-
-# Chat interface page that uses the conversation id (cid) provided in the URL.
+# Chat interface page. If the conversation id is not found, create it.
 @app.route('/chat')
 def chat():
     conv_id = request.args.get("cid")
-    if not conv_id or conv_id not in conversations:
-        return "Invalid conversation id", 400
-    flow = conversations[conv_id]["flow"]
-    if flow == "setup":
-        title = "Initial Setup"
-    elif flow == "reset_confirm":
-        title = "Reset Confirmation"
-    elif flow == "reset_parameters":
-        title = "Reset Parameters"
-    else:
-        title = "Reset Parameters"
-    return render_template_string(CHAT_HTML, title=title, cid=conv_id)
+    if not conv_id:
+        conv_id = get_main_conversation()
+    if conv_id not in conversations:
+        # Create it if it doesn't exist.
+        conversations[conv_id] = {"messages": []}
+    return render_template_string(CHAT_HTML, cid=conv_id)
 
-# Return the current question for a given conversation.
-@app.route('/start')
-def start():
-    conv_id = request.args.get("cid")
-    if not conv_id or conv_id not in conversations:
-        return jsonify({"error": "Invalid conversation id"}), 400
-    conv = conversations[conv_id]
-    if conv["index"] < len(conv["steps"]):
-        question = conv["steps"][conv["index"]]["question"]
-        return jsonify({"message": question})
-    else:
-        return jsonify({"message": "Conversation complete!"})
+# Return all messages for a given conversation.
+@app.route('/messages/<conv_id>')
+def get_messages(conv_id):
+    if conv_id not in conversations:
+        # Instead of error, create the conversation
+        conversations[conv_id] = {"messages": []}
+    return jsonify({"messages": conversations[conv_id]["messages"]})
 
-# Receive an answer and send the next question.
+# Endpoint for the user to send a message.
 @app.route('/send', methods=['POST'])
 def send():
     conv_id = request.args.get("cid")
     if not conv_id or conv_id not in conversations:
         return jsonify({"error": "Invalid conversation id"}), 400
-    conv = conversations[conv_id]
     data = request.get_json()
-    user_message = data.get("message", "")
-    if conv["index"] < len(conv["steps"]):
-        current_key = conv["steps"][conv["index"]]["key"]
-        conv["responses"][current_key] = user_message
-        conv["index"] += 1
-        if conv["index"] < len(conv["steps"]):
-            next_question = conv["steps"][conv["index"]]["question"]
-            return jsonify({"message": next_question})
-        else:
-            # For setup and reset_parameters flows, compute additional parameter.
-            if conv["flow"] in ["setup", "reset_parameters"]:
-                try:
-                    minting = float(conv["responses"].get("minting", 0))
-                    distribution = float(conv["responses"].get("distribution", 0))
-                    conv["responses"]["target_number"] = minting + distribution
-                except Exception:
-                    conv["responses"]["target_number"] = None
-            conv["finished"] = True
-            return jsonify({"message": "All parameters received!", "finished": True})
-    else:
-        return jsonify({"message": "Conversation already complete.", "finished": True})
+    text = data.get("message", "")
+    conversations[conv_id]["messages"].append({"sender": "user", "text": text})
+    return jsonify({"status": "Message received"})
 
-# Endpoint for external clients (e.g., the main script) to check the conversation state.
-@app.route('/conversation/<conv_id>')
-def get_conversation(conv_id):
-    if conv_id not in conversations:
+# Endpoint for the bot (or main script) to send a reply.
+@app.route('/reply', methods=['POST'])
+def reply():
+    conv_id = request.args.get("cid")
+    if not conv_id or conv_id not in conversations:
         return jsonify({"error": "Invalid conversation id"}), 400
-    conv = conversations[conv_id]
-    return jsonify({"finished": conv["finished"], "responses": conv["responses"]})
+    data = request.get_json()
+    text = data.get("message", "")
+    conversations[conv_id]["messages"].append({"sender": "bot", "text": text})
+    return jsonify({"status": "Bot reply added"})
 
 CHAT_HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ title }}</title>
+    <title>Persistent Chat</title>
     <style>
         body { font-family: Arial, sans-serif; }
         #chat { width: 500px; height: 400px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
@@ -153,53 +74,51 @@ CHAT_HTML = '''
     </style>
 </head>
 <body>
-    <h2>{{ title }}</h2>
+    <h2>Persistent Chat</h2>
     <div id="chat"></div>
-    <input type="text" id="input" placeholder="Type your answer and press Enter" autofocus>
+    <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
-        function addMessage(sender, text) {
-            const chat = document.getElementById('chat');
-            const msg = document.createElement('div');
-            msg.className = 'message ' + sender;
-            msg.textContent = sender.toUpperCase() + ': ' + text;
-            chat.appendChild(msg);
-            chat.scrollTop = chat.scrollHeight;
+        function renderMessages(messages) {
+            const chatDiv = document.getElementById("chat");
+            chatDiv.innerHTML = "";
+            messages.forEach(msg => {
+                const div = document.createElement("div");
+                div.className = "message " + msg.sender;
+                div.textContent = msg.sender.toUpperCase() + ": " + msg.text;
+                chatDiv.appendChild(div);
+            });
+            chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-        function sendMessage(message) {
-            addMessage('user', message);
+        function fetchMessages() {
+            fetch('/messages/' + cid)
+            .then(response => response.json())
+            .then(data => {
+                if (data.messages) {
+                    renderMessages(data.messages);
+                }
+            });
+        }
+        function sendMessage(text) {
             fetch('/send?cid=' + cid, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: message})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.message) {
-                    addMessage('bot', data.message);
-                }
-                if (data.finished) {
-                    document.getElementById('input').disabled = true;
-                }
+                body: JSON.stringify({message: text})
+            }).then(() => {
+                fetchMessages();
             });
         }
-        document.getElementById('input').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
+        document.getElementById("input").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
                 const text = this.value.trim();
-                if (text !== '') {
+                if (text !== "") {
                     sendMessage(text);
-                    this.value = '';
+                    this.value = "";
                 }
             }
         });
-        // Load the first question on page load.
-        window.onload = function() {
-            fetch('/start?cid=' + cid)
-            .then(response => response.json())
-            .then(data => {
-                addMessage('bot', data.message);
-            });
-        }
+        setInterval(fetchMessages, 2000);
+        fetchMessages();
     </script>
 </body>
 </html>
