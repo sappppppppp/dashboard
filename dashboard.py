@@ -91,20 +91,16 @@ CHAT_HTML = '''
 
         function fetchMessages() {
             fetch('/messages/' + cid)
-            .then(response => response.json())
-            .then(data => {
-                if (data.messages) {
-                    const currentLength = data.messages.length;
-                    // Update title if new messages are present
-                    if (currentLength > prevMessagesLength) {
-                        const now = new Date();
-                        const dateTimeString = now.toLocaleString();
-                        document.title = `Persistent Chat ${dateTimeString}`;
+                .then(response => response.json())
+                .then(data => {
+                    if (data.messages) {
+                        renderMessages(data.messages);
+                        // Log the new title value to the console.
+                        const newTitle = "Persistent Chat HERE " + new Date().toLocaleString();
+                        console.log("Updating title to:", newTitle);
+                        document.title = newTitle;
                     }
-                    prevMessagesLength = currentLength;
-                    renderMessages(data.messages);
-                }
-            });
+                });
         }
 
         function sendMessage(text) {
