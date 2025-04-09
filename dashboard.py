@@ -8,33 +8,29 @@ app.secret_key = 'your-secret-key'  # Replace with a secure key
 conversations = {}
 
 def get_main_conversation():
-    conv_id = "main_chat"  # fixed persistent conversation ID
+    conv_id = "main_chat"
     if conv_id not in conversations:
         conversations[conv_id] = {"messages": []}  # Each message is a dict: {"sender": "user"/"bot", "text": "..."}
     return conv_id
 
 @app.route('/new/main')
 def new_main_conversation():
-    conv_id = get_main_conversation()  # Always returns "main_chat"
+    conv_id = get_main_conversation()  # Always "main_chat"
     return jsonify({"conversation_id": conv_id})
 
-# Chat interface page. If the conversation id is not found, create it.
+# Chat interface page that always uses the persistent conversation.
 @app.route('/chat')
 def chat():
     conv_id = request.args.get("cid")
-    if not conv_id:
-        conv_id = get_main_conversation()
-    if conv_id not in conversations:
-        # Create it if it doesn't exist.
-        conversations[conv_id] = {"messages": []}
+    if not conv_id or conv_id not in conversations:
+        return "Invalid conversation id", 400
     return render_template_string(CHAT_HTML, cid=conv_id)
 
-# Return all messages for a given conversation.
+# Return all messages in the conversation.
 @app.route('/messages/<conv_id>')
 def get_messages(conv_id):
     if conv_id not in conversations:
-        # Instead of error, create the conversation
-        conversations[conv_id] = {"messages": []}
+        return jsonify({"error": "Invalid conversation id"}), 400
     return jsonify({"messages": conversations[conv_id]["messages"]})
 
 # Endpoint for the user to send a message.
@@ -77,49 +73,57 @@ CHAT_HTML = '''
     <h2>Persistent Chat</h2>
     <div id="chat"></div>
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
-    <script>
-        const cid = "{{ cid }}";
-        function renderMessages(messages) {
-            const chatDiv = document.getElementById("chat");
-            chatDiv.innerHTML = "";
-            messages.forEach(msg => {
-                const div = document.createElement("div");
-                div.className = "message " + msg.sender;
-                div.textContent = msg.sender.toUpperCase() + ": " + msg.text;
-                chatDiv.appendChild(div);
-            });
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-        function fetchMessages() {
-            fetch('/messages/' + cid)
+<script>
+    const cid = "{{ cid }}";
+
+    function renderMessages(messages) {
+        const chatDiv = document.getElementById("chat");
+        chatDiv.innerHTML = "";
+        messages.forEach(msg => {
+            const div = document.createElement("div");
+            div.className = "message " + msg.sender;
+            div.textContent = msg.sender.toUpperCase() + ": " + msg.text;
+            chatDiv.appendChild(div);
+        });
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+
+    function fetchMessages() {
+        fetch('/messages/' + cid)
             .then(response => response.json())
             .then(data => {
                 if (data.messages) {
                     renderMessages(data.messages);
+                    // Update the document title with the current date and time.
+                    document.title = "Persistent Chat HERE " + new Date().toLocaleString();
                 }
             });
-        }
-        function sendMessage(text) {
-            fetch('/send?cid=' + cid, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: text})
-            }).then(() => {
-                fetchMessages();
-            });
-        }
-        document.getElementById("input").addEventListener("keydown", function(e) {
-            if (e.key === "Enter") {
-                const text = this.value.trim();
-                if (text !== "") {
-                    sendMessage(text);
-                    this.value = "";
-                }
-            }
+    }
+
+    function sendMessage(text) {
+        fetch('/send?cid=' + cid, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text})
+        }).then(() => {
+            fetchMessages();
         });
-        setInterval(fetchMessages, 2000);
-        fetchMessages();
-    </script>
+    }
+
+    document.getElementById("input").addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+            const text = this.value.trim();
+            if (text !== "") {
+                sendMessage(text);
+                this.value = "";
+            }
+        }
+    });
+
+    setInterval(fetchMessages, 2000);
+    fetchMessages();
+</script>
+
 </body>
 </html>
 '''
