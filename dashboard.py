@@ -76,10 +76,9 @@ CHAT_HTML = '''
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
-
         // To track previous number of messages
         let previousMessageCount = 0;
-
+    
         function renderMessages(messages) {
             const chatDiv = document.getElementById("chat");
             chatDiv.innerHTML = "";
@@ -91,25 +90,27 @@ CHAT_HTML = '''
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-
+    
         function fetchMessages() {
             fetch('/messages/' + cid)
                 .then(response => response.json())
                 .then(data => {
                     if (data.messages) {
                         renderMessages(data.messages);
-                        // Check if new messages have been added (i.e., increased length)
+                        // If new messages have been added since last fetch.
                         if (data.messages.length > previousMessageCount) {
-                            // Only update heading when a new message arrives.
-                            const newHeading = "Persistent Chat HERE " + new Date().toLocaleString();
-                            console.log("Updating heading to:", newHeading);
-                            document.getElementById("pageHeading").textContent = newHeading;
+                            const newText = "Persistent Chat HERE " + new Date().toLocaleString();
+                            console.log("Updating heading and title to:", newText);
+                            document.getElementById("pageHeading").textContent = newText;
+                            // Update the page's title (browser tab text)
+                            document.title = newText;
                         }
+                        // Update previous message count
                         previousMessageCount = data.messages.length;
                     }
                 });
         }
-
+    
         function sendMessage(text) {
             fetch('/send?cid=' + cid, {
                 method: 'POST',
@@ -119,7 +120,7 @@ CHAT_HTML = '''
                 fetchMessages();
             });
         }
-
+    
         document.getElementById("input").addEventListener("keydown", function (e) {
             if (e.key === "Enter") {
                 const text = this.value.trim();
@@ -129,11 +130,12 @@ CHAT_HTML = '''
                 }
             }
         });
-
-        // Polling messages every 2 seconds.
+    
+        // Poll messages every 2 seconds.
         setInterval(fetchMessages, 2000);
         fetchMessages();
     </script>
+
 </body>
 </html>
 '''
