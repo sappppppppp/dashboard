@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template_string
+import datetime
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Replace with a secure key
@@ -6,6 +7,7 @@ app.secret_key = 'your-secret-key'  # Replace with a secure key
 # Global in-memory store for conversations.
 # We use a fixed conversation ID for our persistent chat.
 conversations = {}
+current_heading = "Persistent Chat"  # New global variable for heading text
 
 def get_main_conversation():
     conv_id = "main_chat"
@@ -13,18 +15,25 @@ def get_main_conversation():
         conversations[conv_id] = {"messages": []}  # Each message is a dict: {"sender": "user"/"bot", "text": "..."}
     return conv_id
 
+# Helper to update heading when a new message is added
+def update_heading():
+    global current_heading
+    # You can adjust the date/time formatting to your liking
+    current_heading = "Persistent Chat HERE " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 @app.route('/new/main')
 def new_main_conversation():
     conv_id = get_main_conversation()  # Always "main_chat"
     return jsonify({"conversation_id": conv_id})
 
-# Chat interface page that always uses the persistent conversation.
+# Chat interface page that uses the persistent conversation.
 @app.route('/chat')
 def chat():
     conv_id = request.args.get("cid")
     if not conv_id or conv_id not in conversations:
         return "Invalid conversation id", 400
-    return render_template_string(CHAT_HTML, cid=conv_id)
+    # Pass the current heading into the template so it appears in the served HTML.
+    return render_template_string(CHAT_HTML, cid=conv_id, heading=current_heading)
 
 # Return all messages in the conversation.
 @app.route('/messages/<conv_id>')
@@ -41,7 +50,10 @@ def send():
         return jsonify({"error": "Invalid conversation id"}), 400
     data = request.get_json()
     text = data.get("message", "")
+    # Append the message to the conversation.
     conversations[conv_id]["messages"].append({"sender": "user", "text": text})
+    # Update the heading (server-side) upon receiving a new message.
+    update_heading()
     return jsonify({"status": "Message received"})
 
 # Endpoint for the bot (or main script) to send a reply.
@@ -53,13 +65,16 @@ def reply():
     data = request.get_json()
     text = data.get("message", "")
     conversations[conv_id]["messages"].append({"sender": "bot", "text": text})
+    # Update the heading (server-side) when a new reply is added.
+    update_heading()
     return jsonify({"status": "Bot reply added"})
 
+# Update the HTML template to use the 'heading' passed from the server.
 CHAT_HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Persistent Chat</title>
+    <title>{{ heading }}</title>
     <style>
         body { font-family: Arial, sans-serif; }
         #chat { width: 500px; height: 400px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
@@ -70,15 +85,13 @@ CHAT_HTML = '''
     </style>
 </head>
 <body>
-    <!-- Updated heading with an id for easy targeting -->
-    <h2 id="pageHeading">Persistent Chat</h2>
+    <!-- Render heading using the server-side variable -->
+    <h2 id="pageHeading">{{ heading }}</h2>
     <div id="chat"></div>
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
-        // To track previous number of messages
-        let previousMessageCount = 0;
-    
+
         function renderMessages(messages) {
             const chatDiv = document.getElementById("chat");
             chatDiv.innerHTML = "";
@@ -90,27 +103,17 @@ CHAT_HTML = '''
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-    
+
         function fetchMessages() {
             fetch('/messages/' + cid)
                 .then(response => response.json())
                 .then(data => {
                     if (data.messages) {
                         renderMessages(data.messages);
-                        // If new messages have been added since last fetch.
-                        if (data.messages.length > previousMessageCount) {
-                            const newText = "Persistent Chat HERE " + new Date().toLocaleString();
-                            console.log("Updating heading and title to:", newText);
-                            document.getElementById("pageHeading").textContent = newText;
-                            // Update the page's title (browser tab text)
-                            document.title = newText;
-                        }
-                        // Update previous message count
-                        previousMessageCount = data.messages.length;
                     }
                 });
         }
-    
+
         function sendMessage(text) {
             fetch('/send?cid=' + cid, {
                 method: 'POST',
@@ -120,8 +123,8 @@ CHAT_HTML = '''
                 fetchMessages();
             });
         }
-    
-        document.getElementById("input").addEventListener("keydown", function (e) {
+
+        document.getElementById("input").addEventListener("keydown", function(e) {
             if (e.key === "Enter") {
                 const text = this.value.trim();
                 if (text !== "") {
@@ -130,12 +133,10 @@ CHAT_HTML = '''
                 }
             }
         });
-    
-        // Poll messages every 2 seconds.
+
         setInterval(fetchMessages, 2000);
         fetchMessages();
     </script>
-
 </body>
 </html>
 '''
