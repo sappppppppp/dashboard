@@ -75,6 +75,7 @@ CHAT_HTML = '''
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
+
         function renderMessages(messages) {
             const chatDiv = document.getElementById("chat");
             chatDiv.innerHTML = "";
@@ -86,15 +87,19 @@ CHAT_HTML = '''
             });
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
+
         function fetchMessages() {
             fetch('/messages/' + cid)
-            .then(response => response.json())
-            .then(data => {
-                if (data.messages) {
-                    renderMessages(data.messages);
-                }
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.messages) {
+                        renderMessages(data.messages);
+                        // Update the document title with the current date and time.
+                        document.title = "Persistent Chat HERE " + new Date().toLocaleString();
+                    }
+                });
         }
+
         function sendMessage(text) {
             fetch('/send?cid=' + cid, {
                 method: 'POST',
@@ -104,7 +109,8 @@ CHAT_HTML = '''
                 fetchMessages();
             });
         }
-        document.getElementById("input").addEventListener("keydown", function(e) {
+
+        document.getElementById("input").addEventListener("keydown", function (e) {
             if (e.key === "Enter") {
                 const text = this.value.trim();
                 if (text !== "") {
@@ -113,9 +119,11 @@ CHAT_HTML = '''
                 }
             }
         });
+
         setInterval(fetchMessages, 2000);
         fetchMessages();
     </script>
+
 </body>
 </html>
 '''
