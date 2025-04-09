@@ -70,12 +70,15 @@ CHAT_HTML = '''
     </style>
 </head>
 <body>
-    <h2>Persistent Chat</h2>
+    <!-- Updated heading with an id for easy targeting -->
+    <h2 id="pageHeading">Persistent Chat</h2>
     <div id="chat"></div>
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
-        let prevMessagesLength = 0; // Track previous message count
+
+        // To track previous number of messages
+        let previousMessageCount = 0;
 
         function renderMessages(messages) {
             const chatDiv = document.getElementById("chat");
@@ -95,10 +98,14 @@ CHAT_HTML = '''
                 .then(data => {
                     if (data.messages) {
                         renderMessages(data.messages);
-                        // Log the new title value to the console.
-                        const newTitle = "Persistent Chat HERE " + new Date().toLocaleString();
-                        console.log("Updating title to:", newTitle);
-                        document.title = newTitle;
+                        // Check if new messages have been added (i.e., increased length)
+                        if (data.messages.length > previousMessageCount) {
+                            // Only update heading when a new message arrives.
+                            const newHeading = "Persistent Chat HERE " + new Date().toLocaleString();
+                            console.log("Updating heading to:", newHeading);
+                            document.getElementById("pageHeading").textContent = newHeading;
+                        }
+                        previousMessageCount = data.messages.length;
                     }
                 });
         }
@@ -113,7 +120,7 @@ CHAT_HTML = '''
             });
         }
 
-        document.getElementById("input").addEventListener("keydown", function(e) {
+        document.getElementById("input").addEventListener("keydown", function (e) {
             if (e.key === "Enter") {
                 const text = this.value.trim();
                 if (text !== "") {
@@ -123,8 +130,9 @@ CHAT_HTML = '''
             }
         });
 
+        // Polling messages every 2 seconds.
         setInterval(fetchMessages, 2000);
-        fetchMessages(); // Initial fetch
+        fetchMessages();
     </script>
 </body>
 </html>
