@@ -75,6 +75,7 @@ CHAT_HTML = '''
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
     <script>
         const cid = "{{ cid }}";
+        let prevMessagesLength = 0; // Track previous message count
 
         function renderMessages(messages) {
             const chatDiv = document.getElementById("chat");
@@ -90,14 +91,20 @@ CHAT_HTML = '''
 
         function fetchMessages() {
             fetch('/messages/' + cid)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.messages) {
-                        renderMessages(data.messages);
-                        // Update the document title with the current date and time.
-                        document.title = "Persistent Chat HERE " + new Date().toLocaleString();
+            .then(response => response.json())
+            .then(data => {
+                if (data.messages) {
+                    const currentLength = data.messages.length;
+                    // Update title if new messages are present
+                    if (currentLength > prevMessagesLength) {
+                        const now = new Date();
+                        const dateTimeString = now.toLocaleString();
+                        document.title = `Persistent Chat ${dateTimeString}`;
                     }
-                });
+                    prevMessagesLength = currentLength;
+                    renderMessages(data.messages);
+                }
+            });
         }
 
         function sendMessage(text) {
@@ -110,7 +117,7 @@ CHAT_HTML = '''
             });
         }
 
-        document.getElementById("input").addEventListener("keydown", function (e) {
+        document.getElementById("input").addEventListener("keydown", function(e) {
             if (e.key === "Enter") {
                 const text = this.value.trim();
                 if (text !== "") {
@@ -121,9 +128,8 @@ CHAT_HTML = '''
         });
 
         setInterval(fetchMessages, 2000);
-        fetchMessages();
+        fetchMessages(); // Initial fetch
     </script>
-
 </body>
 </html>
 '''
