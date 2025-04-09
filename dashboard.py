@@ -73,56 +73,56 @@ CHAT_HTML = '''
     <h2>Persistent Chat</h2>
     <div id="chat"></div>
     <input type="text" id="input" placeholder="Type your message and press Enter" autofocus>
-<script>
-    const cid = "{{ cid }}";
+    <script>
+        const cid = "{{ cid }}";
 
-    function renderMessages(messages) {
-        const chatDiv = document.getElementById("chat");
-        chatDiv.innerHTML = "";
-        messages.forEach(msg => {
-            const div = document.createElement("div");
-            div.className = "message " + msg.sender;
-            div.textContent = msg.sender.toUpperCase() + ": " + msg.text;
-            chatDiv.appendChild(div);
-        });
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-    }
-
-    function fetchMessages() {
-        fetch('/messages/' + cid)
-            .then(response => response.json())
-            .then(data => {
-                if (data.messages) {
-                    renderMessages(data.messages);
-                    // Update the document title with the current date and time.
-                    document.title = "Persistent Chat HERE " + new Date().toLocaleString();
-                }
+        function renderMessages(messages) {
+            const chatDiv = document.getElementById("chat");
+            chatDiv.innerHTML = "";
+            messages.forEach(msg => {
+                const div = document.createElement("div");
+                div.className = "message " + msg.sender;
+                div.textContent = msg.sender.toUpperCase() + ": " + msg.text;
+                chatDiv.appendChild(div);
             });
-    }
-
-    function sendMessage(text) {
-        fetch('/send?cid=' + cid, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: text})
-        }).then(() => {
-            fetchMessages();
-        });
-    }
-
-    document.getElementById("input").addEventListener("keydown", function (e) {
-        if (e.key === "Enter") {
-            const text = this.value.trim();
-            if (text !== "") {
-                sendMessage(text);
-                this.value = "";
-            }
+            chatDiv.scrollTop = chatDiv.scrollHeight;
         }
-    });
 
-    setInterval(fetchMessages, 2000);
-    fetchMessages();
-</script>
+        function fetchMessages() {
+            fetch('/messages/' + cid)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.messages) {
+                        renderMessages(data.messages);
+                        // Update the document title with the current date and time.
+                        document.title = "Persistent Chat HERE " + new Date().toLocaleString();
+                    }
+                });
+        }
+
+        function sendMessage(text) {
+            fetch('/send?cid=' + cid, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: text})
+            }).then(() => {
+                fetchMessages();
+            });
+        }
+
+        document.getElementById("input").addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                const text = this.value.trim();
+                if (text !== "") {
+                    sendMessage(text);
+                    this.value = "";
+                }
+            }
+        });
+
+        setInterval(fetchMessages, 2000);
+        fetchMessages();
+    </script>
 
 </body>
 </html>
